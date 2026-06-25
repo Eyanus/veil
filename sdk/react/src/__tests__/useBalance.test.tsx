@@ -3,69 +3,32 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react';
-import { Networks } from '@stellar/stellar-sdk';
-import { VeilProvider } from '../provider';
-import type { WalletConfig, InvisibleWallet } from '../../../src/useInvisibleWallet';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
 import { useBalance, type BalanceData } from '../hooks/useBalance';
 
-// Mock wallet implementation
-const createMockWallet = (overrides: Partial<InvisibleWallet> = {}): InvisibleWallet => {
-  return {
-    address: 'C123456789',
-    isDeployed: true,
-    isPending: false,
-    error: null,
-    register: jest.fn(),
-    deploy: jest.fn(),
-    signAuthEntry: jest.fn(),
-    login: jest.fn(),
-    getNonce: jest.fn(),
-    addSigner: jest.fn(),
-    removeSigner: jest.fn(),
-    getSigners: jest.fn(),
-    setGuardian: jest.fn(),
-    initiateRecovery: jest.fn(),
-    completeRecovery: jest.fn(),
-    approve: jest.fn(),
-    getBalance: jest.fn(),
-    sendPayment: jest.fn(),
-    getAllowance: jest.fn(),
-    outbox: { enqueue: jest.fn(), get: jest.fn(), list: jest.fn(), delete: jest.fn(), clear: jest.fn() } as any,
-    replayOutbox: jest.fn(),
-    encryptLocal: jest.fn(),
-    decryptLocal: jest.fn(),
-    encryptionMode: jest.fn(),
-    ...overrides,
-  };
-};
+// Setup
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false, // Disable retries for tests
+      },
+    },
+  });
 
-// Mock useInvisibleWallet hook
-jest.mock('../../../src/useInvisibleWallet', () => ({
-  ...jest.requireActual('../../../src/useInvisibleWallet'),
-  useInvisibleWallet: jest.fn(),
-}));
-
-import { useInvisibleWallet as mockUseInvisibleWallet } from '../../../src/useInvisibleWallet';
-
-// Test config
-const testConfig: WalletConfig = {
-  factoryAddress: 'CFACTORY',
-  rpcUrl: 'https://soroban-testnet.stellar.org',
-  networkPassphrase: Networks.TESTNET,
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 };
 
 describe('useBalance', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should return loading state initially', () => {
-    const mockWallet = createMockWallet({ address: 'C123456789' });
-    (mockUseInvisibleWallet as jest.Mock).mockReturnValue(mockWallet);
-
-    const { result } = renderHook(() => useBalance(), {
-      wrapper: ({ children }) => <VeilProvider config={testConfig}>{children}</VeilProvider>,
-    });
+    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
+    const { result } = renderHook(
+      () => useBalance('G123ABC', mockFetch),
+      { wrapper: createWrapper() },
+    );
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
@@ -74,18 +37,17 @@ describe('useBalance', () => {
 
   it('should fetch and return balance data on success', async () => {
     const mockBalanceData: BalanceData = {
-      address: 'C123456789',
+      address: 'G123ABC',
       amount: BigInt(1000),
-      assetCode: 'XLM',
+      assetCode: 'USDC',
     };
 
-    const mockGetBalance = jest.fn<Promise<any>, [string | undefined]>().mockResolvedValue(mockBalanceData);
-    const mockWallet = createMockWallet({ address: 'C123456789', getBalance: mockGetBalance });
-    (mockUseInvisibleWallet as jest.Mock).mockReturnValue(mockWallet);
+    const mockFetch = jest.fn<Promise<BalanceData>, [string]>().mockResolvedValue(mockBalanceData);
 
-    const { result } = renderHook(() => useBalance(), {
-      wrapper: ({ children }) => <VeilProvider config={testConfig}>{children}</VeilProvider>,
-    });
+    const { result } = renderHook(
+      () => useBalance('G123ABC', mockFetch),
+      { wrapper: createWrapper() },
+    );
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -93,89 +55,82 @@ describe('useBalance', () => {
 
     expect(result.current.data).toEqual(mockBalanceData);
     expect(result.current.error).toBeNull();
-    expect(mockGetBalance).toHaveBeenCalledWith(undefined);
+    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
   });
 
-  it.skip('should return error state when fetch fails', async () => {
+  it('should return error state when fetch fails', async () => {
     const mockError = new Error('Failed to fetch balance');
-    const mockGetBalance = jest.fn<Promise<any>, [string | undefined]>().mockRejectedValue(mockError);
-    const mockWallet = createMockWallet({ address: 'C123456789', getBalance: mockGetBalance });
-    (mockUseInvisibleWallet as jest.Mock).mockReturnValue(mockWallet);
+    const mockFetch = jest.fn<Promise<BalanceData>, [string]>().mockRejectedValue(mockError);
 
-    const { result } = renderHook(() => useBalance(), {
-      wrapper: ({ children }) => <VeilProvider config={testConfig}>{children}</VeilProvider>,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toEqual(mockError);
-    expect(mockGetBalance).toHaveBeenCalledWith(undefined);
-  });
-
-  it('should not fetch when address is null', async () => {
-    const mockGetBalance = jest.fn<Promise<any>, [string | undefined]>();
-    const mockWallet = createMockWallet({ address: null, getBalance: mockGetBalance });
-    (mockUseInvisibleWallet as jest.Mock).mockReturnValue(mockWallet);
-
-    const { result } = renderHook(() => useBalance(), {
-      wrapper: ({ children }) => <VeilProvider config={testConfig}>{children}</VeilProvider>,
-    });
+    const { result } = renderHook(
+      () => useBalance('G123ABC', mockFetch),
+      { wrapper: createWrapper() },
+    );
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
     expect(result.current.data).toBeUndefined();
-    expect(mockGetBalance).not.toHaveBeenCalled();
+    expect(result.current.error).toEqual(mockError);
+    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
   });
 
-  // Token parameter test can be added back later once we have better test setup
-  // it('should refetch with token parameter', async () => {
-  //   const mockBalanceDataXLM: BalanceData = {
-  //     address: 'C123456789',
-  //     amount: BigInt(1000),
-  //     assetCode: 'XLM',
-  //   };
-  //   const mockBalanceDataUSDC: BalanceData = {
-  //     address: 'C123456789',
-  //     amount: BigInt(500),
-  //     assetCode: 'USDC',
-  //   };
+  it('should not fetch when address is null', () => {
+    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
 
-  //   let callCount = 0;
-  //   const mockGetBalance = jest.fn<Promise<any>, [string | undefined]>()
-  //     .mockImplementation((token) => {
-  //       callCount++;
-  //       return Promise.resolve(token === 'USDC' ? mockBalanceDataUSDC : mockBalanceDataXLM);
-  //     });
+    const { result } = renderHook(
+      () => useBalance(null, mockFetch),
+      { wrapper: createWrapper() },
+    );
 
-  //   const mockWallet = createMockWallet({ address: 'C123456789', getBalance: mockGetBalance });
-  //   (mockUseInvisibleWallet as jest.Mock).mockReturnValue(mockWallet);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 
-  //   // Test with XLM
-  //   const { result, rerender } = renderHook(({ token }: { token?: string }) => useBalance(token), {
-  //     wrapper: ({ children }) => <VeilProvider config={testConfig}>{children}</VeilProvider>,
-  //     initialProps: { token: undefined },
-  //   });
+  it('should not fetch when address is undefined', () => {
+    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
 
-  //   await waitFor(() => {
-  //     expect(result.current.isLoading).toBe(false);
-  //   });
+    const { result } = renderHook(
+      () => useBalance(undefined, mockFetch),
+      { wrapper: createWrapper() },
+    );
 
-  //   expect(result.current.data).toEqual(mockBalanceDataXLM);
-  //   expect(mockGetBalance).toHaveBeenCalledWith(undefined);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 
-  //   // Test with USDC
-  //   rerender({ token: 'USDC' } as any);
+  it('should refetch when address changes', async () => {
+    const mockFetch = jest
+      .fn<Promise<BalanceData>, [string]>()
+      .mockImplementation(async (address: string) => ({
+        address,
+        amount: BigInt(1000),
+        assetCode: 'USDC',
+      }));
 
-  //   await waitFor(() => {
-  //     expect(result.current.data).toEqual(mockBalanceDataUSDC);
-  //   });
+    const { result, rerender } = renderHook(
+      ({ address }) => useBalance(address, mockFetch),
+      { wrapper: createWrapper(), initialProps: { address: 'G123ABC' } },
+    );
 
-  //   expect(mockGetBalance).toHaveBeenCalledWith('USDC');
-  //   expect(mockGetBalance).toHaveBeenCalledTimes(2);
-  // });
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data?.address).toBe('G123ABC');
+    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
+
+    // Change address
+    rerender({ address: 'G456DEF' });
+
+    await waitFor(() => {
+      expect(result.current.data?.address).toBe('G456DEF');
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith('G456DEF');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
