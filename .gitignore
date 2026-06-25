@@ -7,6 +7,9 @@ Cargo.lock
 node_modules/
 sdk/node_modules/
 sdk/dist/
+.npm-cache/
+sdk/.npm-cache/
+examples/*/.npm-cache/
 
 # Frontend
 frontend/website/node_modules/

@@ -9,11 +9,19 @@
         "outDir": "./dist",
         "declaration": true,
         "jsx": "react-jsx",
-        "lib": ["es2020", "dom", "dom.iterable"]
+        "lib": ["es2020", "dom", "dom.iterable"],
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "paths": {
+            "invisible-wallet-sdk/vanilla": [
+                "./src/vanilla"
+            ]
+        }
     },
     "include": [
         "src/**/*",
-        "react/**/*"
+        "react/**/*",
+        "angular/**/*"
     ],
     "exclude": [
         "src/**/*.native.ts",
