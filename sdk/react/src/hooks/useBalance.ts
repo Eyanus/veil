@@ -15,19 +15,18 @@ export interface BalanceData {
 
 /**
  * Hook to fetch the balance of the current wallet
- * @param token Optional token contract address to fetch balance for
  * @returns Query result with data, error, and isLoading state
  */
-export function useBalance(token?: string): UseQueryResult<BalanceData, Error> {
+export function useBalance(): UseQueryResult<BalanceData, Error> {
   const { wallet } = useVeilContext();
 
   return useQuery({
-    queryKey: token ? ['balance', wallet.address, token] : ['balance', wallet.address],
+    queryKey: ['balance', wallet.address],
     queryFn: async () => {
       if (!wallet.address) {
         throw new Error('Address is required to fetch balance');
       }
-      return wallet.getBalance(token);
+      return wallet.getBalance();
     },
     enabled: !!wallet.address,
     staleTime: 10 * 1000,
