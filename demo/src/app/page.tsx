@@ -7,6 +7,9 @@ import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { Buffer } from 'buffer';
 
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '';
+if (!FACTORY_ADDRESS) {
+    throw new Error('NEXT_PUBLIC_FACTORY_ADDRESS environment variable is not set. Please configure it before running the demo.');
+}
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || Networks.TESTNET;
 
@@ -67,7 +70,8 @@ export default function Home() {
             // Simulate
             const simReq = await server.simulateTransaction(tx);
             if (rpc.Api.isSimulationError(simReq)) {
-                throw new Error(`Simulation failed: ${(simReq as any).error || JSON.stringify(simReq)}`);
+                const errorMsg = (simReq as any).error?.message ?? (simReq as any).error ?? JSON.stringify(simReq);
+                throw new Error(`Simulation failed: ${errorMsg}`);
             }
 
             // Assemble
