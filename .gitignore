@@ -11,6 +11,9 @@ sdk/dist/
 sdk/.npm-cache/
 examples/*/.npm-cache/
 .angular/
+.env
+.env.*
+!.env.example
 
 # Frontend
 frontend/website/node_modules/
