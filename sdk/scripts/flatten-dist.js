@@ -11,5 +11,5 @@ if (fs.existsSync(nestedSrcDir)) {
   for (const entry of fs.readdirSync(nestedSrcDir)) {
     fs.renameSync(path.join(nestedSrcDir, entry), path.join(distDir, entry));
   }
-  fs.rmdirSync(nestedSrcDir);
+  fs.rmSync(nestedSrcDir, { recursive: true, force: true });
 }

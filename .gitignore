@@ -7,13 +7,10 @@ Cargo.lock
 node_modules/
 sdk/node_modules/
 sdk/dist/
-<<<<<<< Updated upstream
 .npm-cache/
 sdk/.npm-cache/
 examples/*/.npm-cache/
 .angular/
-=======
->>>>>>> Stashed changes
 .env
 .env.*
 !.env.example

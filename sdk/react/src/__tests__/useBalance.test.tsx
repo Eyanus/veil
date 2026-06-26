@@ -5,29 +5,67 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
-import { useBalance, type BalanceData } from '../hooks/useBalance';
+import { useBalance } from '../hooks/useBalance';
+import { VeilContext } from '../context';
+import type { InvisibleWallet } from '../../../src/useInvisibleWallet';
 
-// Setup
-const createWrapper = () => {
+const createMockWallet = (overrides: Partial<InvisibleWallet> = {}): InvisibleWallet => {
+  return {
+    address: 'C123456789',
+    isDeployed: true,
+    isPending: false,
+    error: null,
+    register: jest.fn(),
+    deploy: jest.fn(),
+    signAuthEntry: jest.fn(),
+    login: jest.fn(),
+    getNonce: jest.fn(),
+    addSigner: jest.fn(),
+    removeSigner: jest.fn(),
+    getSigners: jest.fn(),
+    setGuardian: jest.fn(),
+    initiateRecovery: jest.fn(),
+    completeRecovery: jest.fn(),
+    approve: jest.fn(),
+    getBalance: jest.fn(),
+    sendPayment: jest.fn(),
+    getAllowance: jest.fn(),
+    outbox: { enqueue: jest.fn(), get: jest.fn(), list: jest.fn(), delete: jest.fn(), clear: jest.fn() } as any,
+    replayOutbox: jest.fn(),
+    encryptLocal: jest.fn(),
+    decryptLocal: jest.fn(),
+    encryptionMode: jest.fn(),
+    deriveCounterfactualAddress: jest.fn(),
+    ...overrides,
+  } as unknown as InvisibleWallet;
+};
+
+const createWrapper = (wallet: InvisibleWallet) => {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: {
-        retry: false, // Disable retries for tests
-      },
+      queries: { retry: false },
     },
   });
 
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <VeilContext.Provider value={{ wallet }}>
+        {children}
+      </VeilContext.Provider>
+    </QueryClientProvider>
   );
 };
 
 describe('useBalance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should return loading state initially', () => {
-    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
+    const mockWallet = createMockWallet();
     const { result } = renderHook(
-      () => useBalance('G123ABC', mockFetch),
-      { wrapper: createWrapper() },
+      () => useBalance(),
+      { wrapper: createWrapper(mockWallet) },
     );
 
     expect(result.current.isLoading).toBe(true);
@@ -36,17 +74,18 @@ describe('useBalance', () => {
   });
 
   it('should fetch and return balance data on success', async () => {
-    const mockBalanceData: BalanceData = {
-      address: 'G123ABC',
+    const mockBalanceData = {
+      address: 'C123456789',
       amount: BigInt(1000),
       assetCode: 'USDC',
     };
 
-    const mockFetch = jest.fn<Promise<BalanceData>, [string]>().mockResolvedValue(mockBalanceData);
+    const mockGetBalance = jest.fn().mockResolvedValue(mockBalanceData);
+    const mockWallet = createMockWallet({ getBalance: mockGetBalance });
 
     const { result } = renderHook(
-      () => useBalance('G123ABC', mockFetch),
-      { wrapper: createWrapper() },
+      () => useBalance(),
+      { wrapper: createWrapper(mockWallet) },
     );
 
     await waitFor(() => {
@@ -55,82 +94,38 @@ describe('useBalance', () => {
 
     expect(result.current.data).toEqual(mockBalanceData);
     expect(result.current.error).toBeNull();
-    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
+    expect(mockGetBalance).toHaveBeenCalled();
   });
 
   it('should return error state when fetch fails', async () => {
     const mockError = new Error('Failed to fetch balance');
-    const mockFetch = jest.fn<Promise<BalanceData>, [string]>().mockRejectedValue(mockError);
+    const mockGetBalance = jest.fn().mockRejectedValue(mockError);
+    const mockWallet = createMockWallet({ getBalance: mockGetBalance });
 
     const { result } = renderHook(
-      () => useBalance('G123ABC', mockFetch),
-      { wrapper: createWrapper() },
+      () => useBalance(),
+      { wrapper: createWrapper(mockWallet) },
     );
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+      expect(result.current.error).toBe(mockError);
+    }, { timeout: 3000 });
 
     expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toEqual(mockError);
-    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
+    expect(mockGetBalance).toHaveBeenCalled();
   });
 
-  it('should not fetch when address is null', () => {
-    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
+  it('should not fetch when wallet address is null', () => {
+    const mockGetBalance = jest.fn();
+    const mockWallet = createMockWallet({ address: null, getBalance: mockGetBalance });
 
     const { result } = renderHook(
-      () => useBalance(null, mockFetch),
-      { wrapper: createWrapper() },
+      () => useBalance(),
+      { wrapper: createWrapper(mockWallet) },
     );
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data).toBeUndefined();
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should not fetch when address is undefined', () => {
-    const mockFetch = jest.fn<Promise<BalanceData>, [string]>();
-
-    const { result } = renderHook(
-      () => useBalance(undefined, mockFetch),
-      { wrapper: createWrapper() },
-    );
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toBeUndefined();
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should refetch when address changes', async () => {
-    const mockFetch = jest
-      .fn<Promise<BalanceData>, [string]>()
-      .mockImplementation(async (address: string) => ({
-        address,
-        amount: BigInt(1000),
-        assetCode: 'USDC',
-      }));
-
-    const { result, rerender } = renderHook(
-      ({ address }) => useBalance(address, mockFetch),
-      { wrapper: createWrapper(), initialProps: { address: 'G123ABC' } },
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data?.address).toBe('G123ABC');
-    expect(mockFetch).toHaveBeenCalledWith('G123ABC');
-
-    // Change address
-    rerender({ address: 'G456DEF' });
-
-    await waitFor(() => {
-      expect(result.current.data?.address).toBe('G456DEF');
-    });
-
-    expect(mockFetch).toHaveBeenCalledWith('G456DEF');
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockGetBalance).not.toHaveBeenCalled();
   });
 });
