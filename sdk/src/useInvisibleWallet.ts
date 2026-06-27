@@ -729,13 +729,10 @@ export function useInvisibleWallet(config: WalletConfig): InvisibleWallet {
                 try { message = JSON.stringify(err); } catch { message = String(err); }
             }
             if (message.toLowerCase().includes('alreadydeployed') || message.toLowerCase().includes('already_deployed')) {
-                if (!walletAddress) {
-                    throw new Error('Wallet address could not be computed. This is an internal error.');
-                }
-                setAddress(walletAddress);
+                setAddress(walletAddress!);
                 setIsDeployed(true);
-                await store.setItem('invisible_wallet_address', walletAddress);
-                return { walletAddress, alreadyDeployed: true };
+                await store.setItem('invisible_wallet_address', walletAddress!);
+                return { walletAddress: walletAddress!, alreadyDeployed: true };
             }
             setError(message);
             throw new Error(message);
@@ -1396,8 +1393,8 @@ export function useInvisibleWallet(config: WalletConfig): InvisibleWallet {
                     nativeToScVal(amountValue, { type: 'i128' }),
                 ));
 
-            if (memo !== undefined && String(memo).trim().length > 0) {
-                txBuilder.addMemo({ type: 'text', value: String(memo).trim() } as any);
+            if (memo !== undefined) {
+                txBuilder.addMemo({ type: 'text', value: String(memo) } as any);
             }
 
             const tx = txBuilder.setTimeout(30).build();

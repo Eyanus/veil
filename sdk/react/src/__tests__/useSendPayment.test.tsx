@@ -132,7 +132,6 @@ describe('useSendPayment', () => {
     );
 
     const input: SendPaymentInput = {
-      feePayer: 'SBXYZABC',
       to: 'G456DEF',
       amount: 1000,
       token: 'CUSDC',
@@ -168,7 +167,7 @@ describe('useSendPayment', () => {
 
     // First call - fails
     act(() => {
-      result.current.mutate({ feePayer: 'SBXYZABC', to: 'G456DEF', amount: 500 });
+      result.current.mutate({ to: 'G456DEF', amount: 500 });
     });
 
     await waitFor(() => {
@@ -179,7 +178,7 @@ describe('useSendPayment', () => {
 
     // Second call - succeeds
     act(() => {
-      result.current.mutate({ feePayer: 'SBXYZABC', to: 'G456DEF', amount: 500 });
+      result.current.mutate({ to: 'G456DEF', amount: 500 });
     });
 
     await waitFor(() => {
