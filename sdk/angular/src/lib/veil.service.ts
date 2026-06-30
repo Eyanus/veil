@@ -1,6 +1,6 @@
 import { Injectable, Optional, Inject, InjectionToken } from '@angular/core';
-import { createInvisibleWallet, InvisibleWallet } from 'invisible-wallet-sdk/vanilla';
-import type { WalletConfig } from 'invisible-wallet-sdk/vanilla';
+import { createInvisibleWallet, InvisibleWallet } from '../../../src/vanilla';
+import type { WalletConfig } from '../../../src/useInvisibleWallet';
 
 export const VEIL_CONFIG = new InjectionToken<WalletConfig>('Veil Config');
 

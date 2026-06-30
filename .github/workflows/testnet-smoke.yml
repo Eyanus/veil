@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       # ── Install the Stellar CLI (used for friendbot funding) ───────────────
       - name: Install Stellar CLI
@@ -28,8 +30,8 @@ jobs:
           echo "$HOME/.stellar/bin" >> "$GITHUB_PATH"
 
       # ── Install Node dependencies (stellar-sdk for smoke script) ──────────
-      - name: Install stellar-sdk
-        run: npm install @stellar/stellar-sdk
+      - name: Install Node dependencies
+        run: npm ci
 
       # ── Generate a fresh burner keypair ───────────────────────────────────
       - name: Generate burner keypair
@@ -77,7 +79,7 @@ jobs:
           node -e "
             const {
               Keypair,
-              Server,
+              Horizon,
               TransactionBuilder,
               Networks,
               Operation,
@@ -86,7 +88,7 @@ jobs:
             } = require('@stellar/stellar-sdk');
 
             const horizonUrl = process.env.HORIZON_URL;
-            const server = new Server(horizonUrl);
+            const server = new Horizon.Server(horizonUrl);
 
             const senderKp = Keypair.fromSecret(process.env.SENDER_SECRET);
             const recipientPublic = process.env.RECIPIENT_PUBLIC;

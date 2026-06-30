@@ -11,7 +11,7 @@
  *   2. ts-node:          npm install -g ts-node typescript
  *   3. Dependencies:     cd sdk && npm install
  *   4. Factory deployed: bash scripts/deploy_factory.sh
- *      (writes sdk/.env.testnet with FACTORY_ADDRESS, RPC_URL, NETWORK_PASSPHRASE)
+ *      (or configured in .env.local / .env.testnet)
  *
  * HOW TO RUN:
  *   npx ts-node scripts/smoke_test.ts
@@ -38,8 +38,8 @@ import {
   Address,
   nativeToScVal,
   BASE_FEE,
+  rpc as SorobanRpc,
 } from "@stellar/stellar-sdk";
-import * as SorobanRpc from "@stellar/stellar-sdk/rpc";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +56,9 @@ type ComputeWalletAddressFn = (
 // 0. Load env
 // ---------------------------------------------------------------------------
 
-const ENV_FILE = path.resolve(__dirname, "../sdk/.env.testnet");
+const SDK_ENV_FILE = path.resolve(__dirname, "../sdk/.env.testnet");
+const ROOT_ENV_FILE = path.resolve(__dirname, "../.env.testnet");
+const ROOT_LOCAL_ENV_FILE = path.resolve(__dirname, "../.env.local");
 
 function loadEnvFile(filePath: string): void {
   if (!fs.existsSync(filePath)) return;
@@ -75,18 +77,48 @@ function loadEnvFile(filePath: string): void {
   }
 }
 
-loadEnvFile(ENV_FILE);
+loadEnvFile(SDK_ENV_FILE);
+loadEnvFile(ROOT_ENV_FILE);
+loadEnvFile(ROOT_LOCAL_ENV_FILE);
 
-const FACTORY_ADDRESS: string = process.env["FACTORY_ADDRESS"] ?? "";
+const FACTORY_ADDRESS: string =
+  process.env["FACTORY_ADDRESS"] ??
+  process.env["FACTORY_CONTRACT_ID"] ??
+  process.env["NEXT_PUBLIC_FACTORY_ADDRESS"] ??
+  process.env["NEXT_PUBLIC_FACTORY_CONTRACT_ID"] ??
+  "";
 const RPC_URL: string =
-  process.env["RPC_URL"] ?? "https://soroban-testnet.stellar.org";
+  process.env["RPC_URL"] ??
+  process.env["NEXT_PUBLIC_RPC_URL"] ??
+  "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE: string =
-  process.env["NETWORK_PASSPHRASE"] ?? "Test SDF Network ; September 2015";
+  process.env["NETWORK_PASSPHRASE"] ??
+  process.env["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
+  "Test SDF Network ; September 2015";
+
+function isValidContractAddress(value: string): boolean {
+  if (!value || value.includes("...") || /your_/i.test(value)) return false;
+  try {
+    return Address.fromString(value).toString() === value;
+  } catch {
+    return false;
+  }
+}
 
 if (!FACTORY_ADDRESS) {
   console.error(
     "FACTORY_ADDRESS is not set.\n" +
-      "    Run scripts/deploy_factory.sh first, or export FACTORY_ADDRESS=<contract-id>."
+      "    Set one of: FACTORY_ADDRESS, FACTORY_CONTRACT_ID,\n" +
+      "    NEXT_PUBLIC_FACTORY_ADDRESS, or NEXT_PUBLIC_FACTORY_CONTRACT_ID.\n" +
+      "    The smoke script reads .env.local, .env.testnet, and sdk/.env.testnet."
+  );
+  process.exit(1);
+}
+
+if (!isValidContractAddress(FACTORY_ADDRESS)) {
+  console.error(
+    `FACTORY_ADDRESS is invalid: ${FACTORY_ADDRESS}\n` +
+      "    Replace the placeholder with a real contract ID (starts with C...)."
   );
   process.exit(1);
 }

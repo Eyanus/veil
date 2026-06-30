@@ -6,7 +6,7 @@ import {
   Provider,
 } from '@angular/core';
 import { VeilService, VEIL_CONFIG } from './veil.service';
-import type { WalletConfig } from 'invisible-wallet-sdk/vanilla';
+import type { WalletConfig } from '../../../src/useInvisibleWallet';
 
 function veilProviders(config: WalletConfig): Provider[] {
   return [
