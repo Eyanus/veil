@@ -21,6 +21,7 @@ const config = {
     '^@veil/backup$': '<rootDir>/../../sdk/src/backup',
     '^@veil/sep7$':   '<rootDir>/../../sdk/src/sep7',
   },
+  setupFiles: ['<rootDir>/jest.setup.ts'],
   setupFilesAfterEnv: [],
   collectCoverageFrom: [
     'lib/**/*.ts',

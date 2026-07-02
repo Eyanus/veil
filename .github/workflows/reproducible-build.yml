@@ -21,13 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Acceptance: CI fails if the build drifts from the committed hash.
+      # Acceptance: CI fails if any tracked artifact drifts from the committed hash.
       - name: Build & verify against committed hashes
         run: scripts/reproducible-build.sh
 
-      # Acceptance: deterministic build — the same source yields the same hash
-      # across two independent builds. We regenerate the hash document twice and
-      # assert the two are byte-identical.
+      # Acceptance: deterministic build — the same source yields the same tracked
+      # hashes across two independent builds. We regenerate the hash document
+      # twice and assert the two are byte-identical.
       - name: Determinism — build twice and compare
         run: |
           set -euo pipefail

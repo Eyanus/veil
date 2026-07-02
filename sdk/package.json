@@ -87,6 +87,7 @@
     "fast-check": "^4.8.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "jest-util": "^29.7.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "size-limit": "^12.1.0",
@@ -94,7 +95,6 @@
     "typescript": "^5.0.0"
   },
   "jest": {
-    "preset": "ts-jest",
     "testEnvironment": "jsdom",
     "setupFiles": [
       "./jest.setup.ts"
@@ -107,10 +107,17 @@
     "moduleNameMapper": {
       "^@stellar/stellar-sdk$": "<rootDir>/node_modules/@stellar/stellar-sdk"
     },
-    "tsconfig": {
-      "strict": true,
-      "esModuleInterop": true,
-      "skipLibCheck": true
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "strict": true,
+            "esModuleInterop": true,
+            "skipLibCheck": true
+          }
+        }
+      ]
     }
   },
   "size-limit": [

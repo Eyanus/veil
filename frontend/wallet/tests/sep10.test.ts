@@ -63,9 +63,8 @@ function buildChallenge({
   if (!omitManageData) {
     // Primary manage_data op — key is "<home_domain> auth" per the spec.
     const key = manageDataKey ?? `${homeDomain} auth`
-    // Value: 48 bytes of random nonce (spec requirement).
-    const nonce = Buffer.alloc(48)
-    for (let i = 0; i < 48; i++) nonce[i] = i // deterministic for fixtures
+    // Value: deterministic 48-byte nonce payload for repeatable fixtures.
+    const nonce = '0123456789abcdef0123456789abcdef0123456789abcdef'
 
     builder.addOperation(
       Operation.manageData({
@@ -220,8 +219,7 @@ describe('signSep10Challenge', () => {
     function buildMultiOpChallenge(): string {
       const nowSec  = Math.floor(Date.now() / 1000)
       const account = new Account(ANCHOR_C_KP.publicKey(), '-1')
-      const nonce   = Buffer.alloc(48)
-      for (let i = 0; i < 48; i++) nonce[i] = i
+      const nonce   = '0123456789abcdef0123456789abcdef0123456789abcdef'
 
       const tx = new TransactionBuilder(account, {
         fee:              '100',

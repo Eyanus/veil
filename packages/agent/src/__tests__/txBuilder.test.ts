@@ -25,6 +25,10 @@ const mockTxInstance: any = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockLoadAccount: any = jest.fn()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockStrictSendPathsCall: any = jest.fn()
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockStrictSendPaths: any = jest.fn()
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockOperationPayment: any = jest.fn()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockOperationPathPayment: any = jest.fn()
@@ -47,7 +51,10 @@ jest.unstable_mockModule('@stellar/stellar-sdk', () => {
 
   return {
     Horizon: {
-      Server: jest.fn().mockImplementation(() => ({ loadAccount: mockLoadAccount })),
+      Server: jest.fn().mockImplementation(() => ({
+        loadAccount: mockLoadAccount,
+        strictSendPaths: mockStrictSendPaths,
+      })),
     },
     TransactionBuilder: jest.fn().mockImplementation(() => mockTxInstance),
     Networks: {
@@ -82,6 +89,16 @@ function resetChain() {
   mockSetTimeout.mockReturnValue(mockTxInstance)
   mockBuild.mockReturnValue({ toXDR: mockToXDR })
   mockToXDR.mockReturnValue('mock-xdr-string')
+  mockStrictSendPaths.mockImplementation((_sendAsset: unknown, sendAmount: string) => ({
+    call: mockStrictSendPathsCall.mockResolvedValue({
+      records: [
+        {
+          destination_amount: sendAmount,
+          path: [],
+        },
+      ],
+    }),
+  }))
 }
 
 function makeAccount(balances: object[] = [{ asset_type: 'native', balance: '100.0000000' }]) {

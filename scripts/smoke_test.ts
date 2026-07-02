@@ -60,8 +60,9 @@ const SDK_ENV_FILE = path.resolve(__dirname, "../sdk/.env.testnet");
 const ROOT_ENV_FILE = path.resolve(__dirname, "../.env.testnet");
 const ROOT_LOCAL_ENV_FILE = path.resolve(__dirname, "../.env.local");
 
-function loadEnvFile(filePath: string): void {
-  if (!fs.existsSync(filePath)) return;
+function parseEnvFile(filePath: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (!fs.existsSync(filePath)) return env;
   const lines = fs.readFileSync(filePath, "utf-8").split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
@@ -73,27 +74,38 @@ function loadEnvFile(filePath: string): void {
       .slice(eqIdx + 1)
       .trim()
       .replace(/^["']|["']$/g, "");
-    if (!process.env[key]) process.env[key] = val;
+    env[key] = val;
   }
+  return env;
 }
 
-loadEnvFile(SDK_ENV_FILE);
-loadEnvFile(ROOT_ENV_FILE);
-loadEnvFile(ROOT_LOCAL_ENV_FILE);
+const fileEnv = {
+  ...parseEnvFile(SDK_ENV_FILE),
+  ...parseEnvFile(ROOT_ENV_FILE),
+  ...parseEnvFile(ROOT_LOCAL_ENV_FILE),
+};
 
 const FACTORY_ADDRESS: string =
   process.env["FACTORY_ADDRESS"] ??
   process.env["FACTORY_CONTRACT_ID"] ??
   process.env["NEXT_PUBLIC_FACTORY_ADDRESS"] ??
   process.env["NEXT_PUBLIC_FACTORY_CONTRACT_ID"] ??
+  fileEnv["FACTORY_ADDRESS"] ??
+  fileEnv["FACTORY_CONTRACT_ID"] ??
+  fileEnv["NEXT_PUBLIC_FACTORY_ADDRESS"] ??
+  fileEnv["NEXT_PUBLIC_FACTORY_CONTRACT_ID"] ??
   "";
 const RPC_URL: string =
   process.env["RPC_URL"] ??
   process.env["NEXT_PUBLIC_RPC_URL"] ??
+  fileEnv["RPC_URL"] ??
+  fileEnv["NEXT_PUBLIC_RPC_URL"] ??
   "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE: string =
   process.env["NETWORK_PASSPHRASE"] ??
   process.env["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
+  fileEnv["NETWORK_PASSPHRASE"] ??
+  fileEnv["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
   "Test SDF Network ; September 2015";
 
 function isValidContractAddress(value: string): boolean {
@@ -182,6 +194,29 @@ async function fundViaFriendbot(publicKey: string): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function assertContractInstanceExists(
+  contractAddress: string,
+  server: SorobanServer,
+  label: string
+): Promise<void> {
+  const contractScAddress = new Address(contractAddress).toScAddress();
+  const ledgerKey = xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: contractScAddress,
+      key: xdr.ScVal.scvLedgerKeyContractInstance(),
+      durability: xdr.ContractDataDurability.persistent(),
+    })
+  );
+
+  const ledgerEntries = await server.getLedgerEntries(ledgerKey);
+  if (ledgerEntries.entries === undefined || ledgerEntries.entries.length === 0) {
+    throw new Error(
+      `${label} contract ${contractAddress} does not exist on-chain or is not initialized.\n` +
+        "    Replace the placeholder/example contract ID with a real deployed testnet factory."
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +407,10 @@ async function main(): Promise<void> {
   let walletAddress = "";
 
   try {
+    console.log("\n[Preflight] Verifying factory contract exists on-chain...");
+    await assertContractInstanceExists(FACTORY_ADDRESS, server, "Factory");
+    console.log("  Factory contract instance found.");
+
     const feePayer        = await step1_generateAndFundKeypair();
     const expectedAddress = await step2_computeWalletAddress();
     txHash                = await step3_submitDeployTx(feePayer, server);

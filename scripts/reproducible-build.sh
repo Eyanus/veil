@@ -3,8 +3,8 @@
 # Reproducible WASM build & hash verification for the Veil contracts.
 #
 # Builds the Soroban contracts in a pinned, deterministic environment, computes
-# the SHA-256 of each release .wasm artifact, and either checks them against the
-# committed contracts/expected-hashes.json (default) or regenerates that file.
+# the SHA-256 of the release .wasm artifacts, and either checks the tracked set
+# in contracts/expected-hashes.json (default) or regenerates that file.
 #
 # Determinism strategy
 # --------------------
@@ -18,8 +18,9 @@
 #
 # Usage:
 #   scripts/reproducible-build.sh            # build + check against committed hashes
-#   scripts/reproducible-build.sh --update   # build + (re)write expected-hashes.json
-#   scripts/reproducible-build.sh --no-docker # use the host toolchain instead of Docker
+#   scripts/reproducible-build.sh --update            # build + rewrite tracked hashes
+#   scripts/reproducible-build.sh --update --all-artifacts # include every built wasm
+#   scripts/reproducible-build.sh --no-docker         # use the host toolchain instead of Docker
 #
 # Exit status: 0 on success / match, non-zero on build failure or hash drift.
 
@@ -32,11 +33,13 @@ TARGET="wasm32-unknown-unknown"
 
 MODE="check"
 USE_DOCKER=1
+INCLUDE_ALL_ARTIFACTS=0
 for arg in "$@"; do
   case "$arg" in
     --update)    MODE="update" ;;
     --check)     MODE="check" ;;
     --no-docker) USE_DOCKER=0 ;;
+    --all-artifacts) INCLUDE_ALL_ARTIFACTS=1 ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -79,7 +82,7 @@ WASM_DIR="$REPO_ROOT/contracts/target/$TARGET/release"
 echo "==> Hashing artifacts in $WASM_DIR"
 
 # Build a JSON object { "<file>.wasm": "<sha256>", ... } sorted by filename.
-COMPUTED="$(
+COMPUTED_ALL="$(
   cd "$WASM_DIR"
   shopt -s nullglob
   files=( *.wasm )
@@ -99,12 +102,29 @@ print(json.dumps(out, indent=2, sort_keys=True))
 '
 )"
 
-echo "$COMPUTED"
+echo "$COMPUTED_ALL"
 
 if [ "$MODE" = "update" ]; then
   python3 - "$HASHES_FILE" <<PY
 import json, sys
-artifacts = json.loads('''$COMPUTED''')
+all_artifacts = json.loads('''$COMPUTED_ALL''')
+hashes_file = sys.argv[1]
+
+artifacts = all_artifacts
+if $INCLUDE_ALL_ARTIFACTS != 1 and __import__("os").path.exists(hashes_file):
+    with open(hashes_file) as fh:
+        tracked = json.load(fh).get("artifacts", {})
+    if tracked:
+        missing = sorted(name for name in tracked if name not in all_artifacts)
+        if missing:
+            print(
+                "ERROR: tracked artifacts were not produced by the build: "
+                + ", ".join(missing),
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        artifacts = {name: all_artifacts[name] for name in tracked}
+
 doc = {
     "_comment": "SHA-256 of release wasm artifacts. Regenerate with scripts/reproducible-build.sh --update.",
     "toolchain": "1.85.0",
@@ -127,7 +147,7 @@ fi
 
 python3 - "$HASHES_FILE" <<PY
 import json, sys
-computed = json.loads('''$COMPUTED''')
+computed = json.loads('''$COMPUTED_ALL''')
 with open(sys.argv[1]) as fh:
     expected = json.load(fh).get("artifacts", {})
 
@@ -136,7 +156,7 @@ if not expected:
     sys.exit(1)
 
 ok = True
-for name in sorted(set(expected) | set(computed)):
+for name in sorted(expected):
     exp = expected.get(name)
     got = computed.get(name)
     if exp == got:
@@ -148,5 +168,13 @@ for name in sorted(set(expected) | set(computed)):
 if not ok:
     print("\nHash drift detected. If this change is intentional, regenerate with\n  scripts/reproducible-build.sh --update\nand commit contracts/expected-hashes.json.", file=sys.stderr)
     sys.exit(1)
+
+untracked = sorted(name for name in computed if name not in expected)
+if untracked:
+    print(
+        "\nNOTE: built additional untracked wasm artifacts: "
+        + ", ".join(untracked)
+        + "\n      Re-run with --update --all-artifacts if you want to add them to contracts/expected-hashes.json."
+    )
 print("\n==> All wasm hashes match the committed expected-hashes.json")
 PY
