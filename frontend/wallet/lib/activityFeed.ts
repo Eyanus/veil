@@ -49,7 +49,7 @@ export function initActivityFeed(accountId: string): void {
   _feed = createActivityFeed({
     accountId,
     horizonUrl,
-    onEvent(event) {
+    onEvent(event: ActivityEvent) {
       const record = toTxRecord(event)
       if (_records.some(r => r.hash === record.hash)) return
       _records = [record, ..._records].slice(0, 50)

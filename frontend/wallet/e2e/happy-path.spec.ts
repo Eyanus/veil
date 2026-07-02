@@ -13,7 +13,10 @@ import { addVirtualAuthenticator } from './_authenticator';
 
 // ── Network Stubs ─────────────────────────────────────────────────────────────
 
-async function stubNetworkCalls(page: Page) {
+async function stubNetworkCalls(
+  page: Page,
+  options?: { classicPaymentFails?: boolean }
+) {
   // Friendbot — always succeed
   await page.route('**/friendbot.stellar.org/**', (route) =>
     route.fulfill({
@@ -68,6 +71,36 @@ async function stubNetworkCalls(page: Page) {
         paging_token: '',
         last_modified_ledger: 1000,
         last_modified_time: new Date().toISOString()
+      }),
+    });
+  });
+
+  // Horizon classic payment submit — used when sending to a G... address.
+  await page.route('**/horizon-testnet.stellar.org/transactions**', (route) => {
+    if (options?.classicPaymentFails) {
+      return route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          type: 'https://stellar.org/horizon-errors/transaction_failed',
+          title: 'Transaction Failed',
+          detail: 'insufficient balance',
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_underfunded'],
+            },
+          },
+        }),
+      });
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        successful: true,
+        hash: 'a'.repeat(64),
       }),
     });
   });
@@ -240,22 +273,18 @@ test.describe('Happy Path: Register → Fund → Send', () => {
     // Step 6: Fill in send form with valid Stellar address
     const recipientAddress = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     
-    const recipientInput = page.getByLabel(/recipient|address|to/i).or(
-      page.getByPlaceholder(/recipient|address|G\.\.\./i)
-    );
-    await expect(recipientInput.first()).toBeVisible({ timeout: 10_000 });
-    await recipientInput.first().fill(recipientAddress);
+    const recipientInput = page.getByPlaceholder(/G\.\.\. or C\.\.\./i);
+    await expect(recipientInput).toBeVisible({ timeout: 10_000 });
+    await recipientInput.fill(recipientAddress);
     
-    const amountInput = page.getByLabel(/amount/i).or(
-      page.getByPlaceholder(/amount|1\.0/i)
-    );
-    await expect(amountInput.first()).toBeVisible({ timeout: 10_000 });
-    await amountInput.first().fill('1');
+    const amountInput = page.getByPlaceholder('0.00');
+    await expect(amountInput).toBeVisible({ timeout: 10_000 });
+    await amountInput.fill('1');
     
-    // Step 7: Submit the send transaction
-    const sendButton = page.getByRole('button', { name: /send|submit|confirm/i });
-    await expect(sendButton.first()).toBeVisible({ timeout: 10_000 });
-    await sendButton.first().click();
+    // Step 7: Review and submit the send transaction
+    await page.getByRole('button', { name: /review/i }).click();
+    await expect(page.getByRole('button', { name: /confirm & sign/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /confirm & sign/i }).click();
     
     // Step 8: Wait for transaction confirmation
     await expect(
@@ -317,32 +346,8 @@ test.describe('Happy Path: Register → Fund → Send', () => {
 
   test('displays error when send fails', async ({ page }) => {
     await addVirtualAuthenticator(page);
-    
-    // Override network stubs to simulate failure
-    await page.route('**/soroban-testnet.stellar.org', async (route) => {
-      const request = route.request();
-      const postData = request.postDataJSON();
-      
-      if (postData?.method === 'sendTransaction') {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: postData.id || 1,
-            error: {
-              code: -32600,
-              message: 'Transaction failed: insufficient balance',
-            },
-          }),
-        });
-      }
-      
-      // Use default stubs for other calls
-      return route.continue();
-    });
-    
-    await stubNetworkCalls(page);
+
+    await stubNetworkCalls(page, { classicPaymentFails: true });
     
     // Create wallet and navigate to send
     await page.goto('/');
@@ -358,13 +363,13 @@ test.describe('Happy Path: Register → Fund → Send', () => {
     await page.waitForURL(/\/send/, { timeout: 10_000 });
     
     // Fill form
-    await page.getByLabel(/recipient|address|to/i).first().fill(
+    await page.getByPlaceholder(/G\.\.\. or C\.\.\./i).fill(
       'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
     );
-    await page.getByLabel(/amount/i).first().fill('1000000'); // Unrealistic amount
-    
-    // Submit
-    await page.getByRole('button', { name: /send|submit|confirm/i }).first().click();
+    await page.getByPlaceholder('0.00').fill('1000000'); // Unrealistic amount
+
+    await page.getByRole('button', { name: /review/i }).click();
+    await page.getByRole('button', { name: /confirm & sign/i }).click();
     
     // Verify error message appears
     await expect(

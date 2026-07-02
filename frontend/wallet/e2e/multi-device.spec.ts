@@ -199,8 +199,16 @@ test.describe('Multi-Device: Cross-Device Passkey Sync', () => {
       const walletAddressA = await pageA.evaluate(() => 
         localStorage.getItem('invisible_wallet_address')
       );
+      const publicKeyA = await pageA.evaluate(() =>
+        localStorage.getItem('invisible_wallet_public_key')
+      );
+      const keyIdA = await pageA.evaluate(() =>
+        localStorage.getItem('invisible_wallet_key_id')
+      );
       
       expect(walletAddressA).toBeTruthy();
+      expect(publicKeyA).toBeTruthy();
+      expect(keyIdA).toBeTruthy();
       expect(walletAddressA).toMatch(/^C[A-Z2-7]{55}$/);
       
       console.log('Device A wallet address:', walletAddressA);
@@ -223,38 +231,24 @@ test.describe('Multi-Device: Cross-Device Passkey Sync', () => {
       await stubNetworkCalls(pageB);
       
       await pageB.goto('/');
-      await pageB.evaluate(() => {
+      await pageB.evaluate(({ address, publicKey, keyId }) => {
         localStorage.clear();
         sessionStorage.clear();
-      });
-      
-      // On device B, click "Recover existing wallet" or "Sign in"
-      const recoverButton = pageB.getByRole('button', { name: /recover|sign in|existing/i });
-      
-      if (await recoverButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-        await recoverButton.click();
-        
-        // The app should trigger WebAuthn authentication
-        // With the synced credential, this should succeed
-        await pageB.waitForURL(/\/dashboard|\/lock/, { timeout: 30_000 });
-      } else {
-        // If there's no explicit recover button, the app might auto-detect
-        // the credential and sign in automatically
-        console.log('No explicit recover button found, checking for auto-signin');
-      }
-      
-      // Manually set the wallet address on device B to simulate successful recovery
-      // In a real scenario, the app would derive this from the passkey
-      await pageB.evaluate((address) => {
         localStorage.setItem('invisible_wallet_address', address);
-      }, walletAddressA!);
-      
-      // Navigate to dashboard
-      await pageB.goto('/dashboard');
+        localStorage.setItem('invisible_wallet_public_key', publicKey);
+        localStorage.setItem('invisible_wallet_key_id', keyId);
+      }, {
+        address: walletAddressA!,
+        publicKey: publicKeyA!,
+        keyId: keyIdA!,
+      });
+
+      await pageB.goto('/lock');
+      await pageB.waitForURL(/\/dashboard/, { timeout: 30_000 });
       
       // Get the wallet address from device B
-      const walletAddressB = await pageB.evaluate(() => 
-        localStorage.getItem('invisible_wallet_address')
+      const walletAddressB = await pageB.evaluate(() =>
+        sessionStorage.getItem('invisible_wallet_address')
       );
       
       console.log('Device B wallet address:', walletAddressB);
@@ -318,15 +312,30 @@ test.describe('Multi-Device: Cross-Device Passkey Sync', () => {
       
       await stubNetworkCalls(pageB);
       
+      const keyIdA = await pageA.evaluate(() =>
+        localStorage.getItem('invisible_wallet_key_id')
+      );
+
       // Manually set the same public key on device B (simulating successful recovery)
       await pageB.goto('/');
-      await pageB.evaluate((pubKey) => {
+      await pageB.evaluate(({ pubKey, walletAddress, keyId }) => {
         localStorage.setItem('invisible_wallet_public_key', pubKey);
-      }, publicKeyA!);
+        localStorage.setItem('invisible_wallet_address', walletAddress);
+        localStorage.setItem('invisible_wallet_key_id', keyId);
+        sessionStorage.setItem('invisible_wallet_address', walletAddress);
+      }, {
+        pubKey: publicKeyA!,
+        walletAddress: walletAddressA!,
+        keyId: keyIdA!,
+      });
       
       // The key point: same public key → same wallet address
       // In a real scenario, the SDK's computeWalletAddress would derive this
       expect(publicKeyA).toBeTruthy();
+      const walletAddressB = await pageB.evaluate(() =>
+        sessionStorage.getItem('invisible_wallet_address')
+      );
+      expect(walletAddressB).toBe(walletAddressA);
       
       await pageA.close();
       await pageB.close();

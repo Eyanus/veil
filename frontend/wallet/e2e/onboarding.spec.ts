@@ -1,10 +1,10 @@
 // @ts-ignore
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 // ── WebAuthn virtual authenticator helpers ────────────────────────────────────
 
-async function addVirtualAuthenticator(context: BrowserContext) {
-  const cdpSession = await context.newCDPSession(await context.newPage())
+async function addVirtualAuthenticator(page: Page) {
+  const cdpSession = await page.context().newCDPSession(page)
   await cdpSession.send('WebAuthn.enable', { enableUI: false })
   const { authenticatorId } = await cdpSession.send('WebAuthn.addVirtualAuthenticator', {
     options: {
@@ -23,30 +23,71 @@ async function addVirtualAuthenticator(context: BrowserContext) {
 
 async function stubNetworkCalls(page: Page) {
   // Friendbot — always succeed
-  await page.route('https://friendbot.stellar.org/**', (route: any) =>
-    route.fulfill({ status: 200, body: JSON.stringify({ result: 'funded' }) }),
+  await page.route('**/friendbot.stellar.org/**', (route: any) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ result: 'funded', hash: 'a'.repeat(64) }),
+    }),
   )
 
   // Horizon loadAccount — return a minimal funded account
-  await page.route('https://horizon-testnet.stellar.org/accounts/**', (route: any) =>
+  await page.route('**/horizon-testnet.stellar.org/accounts/**', (route: any) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         id: 'GTEST',
-        sequence: '0',
-        balances: [{ asset_type: 'native', balance: '10000.0000000' }],
+        account_id: 'GTEST',
+        sequence: '123456789',
+        subentry_count: 0,
+        balances: [{ asset_type: 'native', balance: '10000.0000000', buying_liabilities: '0.0000000', selling_liabilities: '0.0000000' }],
         thresholds: { low_threshold: 0, med_threshold: 0, high_threshold: 0 },
-        flags: {},
-        signers: [],
+        flags: { auth_required: false, auth_revocable: false, auth_immutable: false },
+        signers: [{ weight: 1, key: 'GTEST', type: 'ed25519_public_key' }],
+        data: {},
+        paging_token: '',
+        last_modified_ledger: 1000,
+        last_modified_time: new Date().toISOString(),
       }),
     }),
   )
 
-  // Soroban RPC — return a minimal simulate response with a fake contract address
-  await page.route('https://soroban-testnet.stellar.org', (route: any) => {
+  // Soroban RPC — return the data needed for simulate -> assemble -> send -> poll.
+  await page.route('**/soroban-testnet.stellar.org', (route: any) => {
     const body = route.request().postDataJSON() as { method?: string }
-    if (body?.method === 'simulateTransaction' || body?.method === 'sendTransaction') {
+    if (body?.method === 'simulateTransaction') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            transactionData: 'AAAAAAAAAAIAAAAGAAAAAem354u9STQWq5b3Ed1j9tOemvL7xV0NPwhn4gXg0AP8AAAAFAAAAAEAAAAH8dTto4AAAAAAAAAAAAAAAAAAAAA=',
+            minResourceFee: '100',
+            results: [{ xdr: 'AAAAAQAAAA==' }],
+            latestLedger: 1000,
+            cost: { cpuInsns: '0', memBytes: '0' },
+          },
+        }),
+      })
+    }
+    if (body?.method === 'sendTransaction') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            status: 'PENDING',
+            hash: 'a'.repeat(64),
+          },
+        }),
+      })
+    }
+    if (body?.method === 'getTransaction') {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -55,9 +96,7 @@ async function stubNetworkCalls(page: Page) {
           id: 1,
           result: {
             status: 'SUCCESS',
-            results: [{ xdr: 'AAAAAQAAAA==' }],
-            latestLedger: '1000',
-            cost: { cpuInsns: '0', memBytes: '0' },
+            latestLedger: 1000,
           },
         }),
       })
@@ -67,14 +106,6 @@ async function stubNetworkCalls(page: Page) {
       contentType: 'application/json',
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }),
     })
-  })
-}
-
-// ── Seed localStorage to simulate "existing wallet" state ─────────────────────
-
-async function seedExistingWallet(page: Page) {
-  await page.evaluate(() => {
-    localStorage.setItem('invisible_wallet_address', 'CFAKEWALLET123FAKE456')
   })
 }
 
@@ -103,7 +134,7 @@ test.describe('Onboarding — new wallet creation', () => {
 
   test('shows biometric waiting state after clicking Create wallet', async ({ page, context }) => {
     // Register a virtual authenticator so WebAuthn doesn't block
-    await addVirtualAuthenticator(context)
+    await addVirtualAuthenticator(page)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
@@ -116,18 +147,20 @@ test.describe('Onboarding — new wallet creation', () => {
   })
 
   test('full onboarding flow: create wallet → dashboard redirect', async ({ page, context }) => {
-    await addVirtualAuthenticator(context)
+    await addVirtualAuthenticator(page)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await page.getByRole('button', { name: /create wallet/i }).click({ force: true })
 
-    // After creation, either:
-    // (a) "Wallet created" card appears before dashboard redirect, OR
-    // (b) we land on /dashboard directly (if the SDK resolves fast)
-    await expect(
-      page.getByText(/wallet created/i).or(page.getByText(/dashboard/i).first()),
-    ).toBeVisible({ timeout: 30_000 })
+    const reachedDashboard = await page
+      .waitForURL(/\/dashboard/, { timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false)
+
+    if (!reachedDashboard) {
+      await expect(page.getByText(/wallet created/i)).toBeVisible({ timeout: 5_000 })
+    }
   })
 })
 
@@ -165,9 +198,6 @@ test.describe('Onboarding — tutorial overlay', () => {
 
     // The OnboardingTutorial component should be visible
     // It renders a full-screen overlay — assert some tutorial-specific text exists
-    const tutorialVisible = await page.locator('[class*="tutorial"], [data-testid="tutorial"]').count()
-    // Accept either the component or any modal-like overlay
-    const bodyText = await page.locator('body').textContent()
-    expect(bodyText).toBeTruthy()
+    await expect(page.getByText(/no seed phrase/i)).toBeVisible()
   })
 })
