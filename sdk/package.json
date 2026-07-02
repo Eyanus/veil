@@ -32,10 +32,13 @@
   ],
   "scripts": {
     "build": "tsc && node scripts/flatten-dist.js",
+    "changeset": "changeset",
+    "release": "npm run build && changeset publish",
     "test": "jest",
     "size": "npm run build && size-limit",
     "test:surface": "jest api-surface.test.ts",
-    "stryker": "stryker run"
+    "stryker": "stryker run",
+    "version-packages": "changeset version"
   },
   "keywords": [
     "stellar",
@@ -84,6 +87,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
+    "@changesets/cli": "^2.29.7",
     "fast-check": "^4.8.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",

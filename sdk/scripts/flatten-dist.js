@@ -7,9 +7,27 @@ const path = require('node:path');
 const distDir = path.join(__dirname, '..', 'dist');
 const nestedSrcDir = path.join(distDir, 'src');
 
+function moveEntry(source, destination) {
+  fs.rmSync(destination, { recursive: true, force: true });
+
+  try {
+    fs.renameSync(source, destination);
+  } catch (error) {
+    // Windows can reject directory renames during rebuilds even after cleanup.
+    // Fall back to copy + remove so repeated local builds still succeed.
+    if (error && (error.code === 'EPERM' || error.code === 'EXDEV')) {
+      fs.cpSync(source, destination, { recursive: true });
+      fs.rmSync(source, { recursive: true, force: true });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 if (fs.existsSync(nestedSrcDir)) {
   for (const entry of fs.readdirSync(nestedSrcDir)) {
-    fs.renameSync(path.join(nestedSrcDir, entry), path.join(distDir, entry));
+    moveEntry(path.join(nestedSrcDir, entry), path.join(distDir, entry));
   }
   fs.rmSync(nestedSrcDir, { recursive: true, force: true });
 }
