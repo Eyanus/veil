@@ -30,7 +30,7 @@ jobs:
       - name: Run actions/setup-node@v4
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: sdk/package-lock.json
           registry-url: https://registry.npmjs.org
@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         working-directory: sdk
         run: npm ci
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Build publishable packages
         working-directory: sdk
@@ -48,9 +51,11 @@ jobs:
         uses: changesets/action@v1
         with:
           cwd: sdk
-          commit: chore: version sdk
-          title: chore: version sdk
+          commit: "chore: version sdk"
+          title: "chore: version sdk"
           publish: npm run release
+          commitMode: github-api
           oidcAuth: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'

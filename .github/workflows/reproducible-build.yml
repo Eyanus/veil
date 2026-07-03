@@ -23,17 +23,19 @@ jobs:
 
       # Acceptance: CI fails if any tracked artifact drifts from the committed hash.
       - name: Build & verify against committed hashes
-        run: scripts/reproducible-build.sh
+        shell: bash
+        run: bash ./scripts/reproducible-build.sh
 
       # Acceptance: deterministic build — the same source yields the same tracked
       # hashes across two independent builds. We regenerate the hash document
       # twice and assert the two are byte-identical.
       - name: Determinism — build twice and compare
+        shell: bash
         run: |
           set -euo pipefail
           cp contracts/expected-hashes.json /tmp/run-1.json
           rm -f contracts/expected-hashes.json
-          scripts/reproducible-build.sh --update
+          bash ./scripts/reproducible-build.sh --update
           cp contracts/expected-hashes.json /tmp/run-2.json
           # Restore the committed file so the working tree stays clean.
           git checkout -- contracts/expected-hashes.json

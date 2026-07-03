@@ -29,6 +29,8 @@ jobs:
       NEXT_PUBLIC_FACTORY_CONTRACT_ID_TESTNET: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
       NEXT_PUBLIC_HORIZON_URL: https://horizon-testnet.stellar.org
       NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      NEXT_PUBLIC_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      NEXT_TELEMETRY_DISABLED: '1'
 
     defaults:
       run:
