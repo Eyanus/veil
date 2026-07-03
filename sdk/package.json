@@ -2,20 +2,20 @@
   "name": "invisible-wallet-sdk",
   "version": "0.1.0",
   "description": "Client SDK for Invisible Wallet (Soroban + WebAuthn) — supports Web and React Native",
-  "main": "dist/src/index.js",
-  "module": "dist/src/index.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
   "react-native": "src/index.ts",
-  "types": "dist/src/index.d.ts",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "react-native": "./src/index.ts",
-      "default": "./dist/src/index.js"
+      "default": "./dist/index.js"
     },
     "./vanilla": {
-      "types": "./dist/src/vanilla.d.ts",
+      "types": "./dist/vanilla.d.ts",
       "react-native": "./src/vanilla.ts",
-      "default": "./dist/src/vanilla.js"
+      "default": "./dist/vanilla.js"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",
@@ -127,12 +127,12 @@
   "size-limit": [
     {
       "name": "main (React hook + utils)",
-      "path": "dist/src/index.js",
+      "path": "dist/index.js",
       "limit": "230 KB"
     },
     {
       "name": "vanilla",
-      "path": "dist/src/vanilla.js",
+      "path": "dist/vanilla.js",
       "limit": "225 KB"
     }
   ]

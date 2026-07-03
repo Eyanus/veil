@@ -100,7 +100,7 @@ jobs:
   deploy-pages:
     name: Deploy to GitHub Pages
     needs: build-storybook
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-storybook.outputs.built == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.built == 'true' && vars.ENABLE_STORYBOOK_PAGES == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
