@@ -25,7 +25,7 @@ jobs:
       built: ${{ steps.detect.outputs.built }}
       package_dir: ${{ steps.detect.outputs.package_dir }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Detect Storybook package
         id: detect
@@ -75,11 +75,22 @@ jobs:
 
       - name: Set up Node.js
         if: steps.detect.outputs.built == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ${{ steps.detect.outputs.package_dir }}/package-lock.json
+
+      - name: Report missing Storybook
+        if: steps.detect.outputs.built != 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping Storybook build because no package with a build-storybook script exists in this repository."
+          {
+            echo "### Storybook skipped"
+            echo
+            echo "No package with a \`build-storybook\` script exists in this repository, so no Pages artifact was generated."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install dependencies
         if: steps.detect.outputs.built == 'true'
@@ -98,14 +109,27 @@ jobs:
 
       - name: Upload static Storybook
         if: steps.detect.outputs.built == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: ${{ steps.detect.outputs.package_dir }}/storybook-static
+
+      - name: Report disabled Pages deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.detect.outputs.built == 'true' && (vars.ENABLE_STORYBOOK_PAGES != 'true' || vars.ENABLE_STORYBOOK_PAGES_DEPLOY != 'true')
+        shell: bash
+        run: |
+          echo "::notice::Storybook Pages deployment is disabled. Set ENABLE_STORYBOOK_PAGES=true and ENABLE_STORYBOOK_PAGES_DEPLOY=true to allow the deploy job to run."
+          {
+            echo "### Storybook deploy skipped"
+            echo
+            echo "A Storybook artifact was built, but GitHub Pages deployment is disabled."
+            echo
+            echo "Set both \`ENABLE_STORYBOOK_PAGES=true\` and \`ENABLE_STORYBOOK_PAGES_DEPLOY=true\` to allow deployment from \`main\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy-pages:
     name: Deploy to GitHub Pages
     needs: build-storybook
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.built == 'true' && vars.ENABLE_STORYBOOK_PAGES == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.built == 'true' && vars.ENABLE_STORYBOOK_PAGES == 'true' && vars.ENABLE_STORYBOOK_PAGES_DEPLOY == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -113,4 +137,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
