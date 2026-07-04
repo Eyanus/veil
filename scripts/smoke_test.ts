@@ -107,6 +107,18 @@ const NETWORK_PASSPHRASE: string =
   fileEnv["NETWORK_PASSPHRASE"] ??
   fileEnv["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
   "Test SDF Network ; September 2015";
+const RP_ID: string =
+  process.env["RP_ID"] ??
+  process.env["NEXT_PUBLIC_RP_ID"] ??
+  fileEnv["RP_ID"] ??
+  fileEnv["NEXT_PUBLIC_RP_ID"] ??
+  "localhost";
+const ORIGIN: string =
+  process.env["ORIGIN"] ??
+  process.env["NEXT_PUBLIC_ORIGIN"] ??
+  fileEnv["ORIGIN"] ??
+  fileEnv["NEXT_PUBLIC_ORIGIN"] ??
+  "https://localhost:5173";
 
 function isValidContractAddress(value: string): boolean {
   if (!value || value.includes("...") || /your_/i.test(value)) return false;
@@ -268,12 +280,14 @@ async function step3_submitDeployTx(
 
   const factory = new Contract(FACTORY_ADDRESS);
   const signerScVal = nativeToScVal(Buffer.from(MOCK_PUBLIC_KEY), { type: "bytes" });
+  const rpIdScVal = nativeToScVal(new TextEncoder().encode(RP_ID), { type: "bytes" });
+  const originScVal = nativeToScVal(new TextEncoder().encode(ORIGIN), { type: "bytes" });
 
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE,
   })
-    .addOperation(factory.call("deploy", signerScVal))
+    .addOperation(factory.call("deploy", signerScVal, rpIdScVal, originScVal))
     .setTimeout(180)
     .build();
 
@@ -398,6 +412,8 @@ async function main(): Promise<void> {
   console.log(`  RPC URL            : ${RPC_URL}`);
   console.log(`  Factory Address    : ${FACTORY_ADDRESS}`);
   console.log(`  Network Passphrase : ${NETWORK_PASSPHRASE}`);
+  console.log(`  RP ID              : ${RP_ID}`);
+  console.log(`  Origin             : ${ORIGIN}`);
 
   const server = new SorobanRpc.Server(RPC_URL, { allowHttp: false });
   const startTime = Date.now();
