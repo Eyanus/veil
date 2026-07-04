@@ -1,140 +1,58 @@
 name: Storybook
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/react/**'
+      - 'sdk/package.json'
+      - '.github/workflows/storybook.yml'
   pull_request:
     paths:
-      - 'frontend/**'
+      - 'sdk/react/**'
+      - 'sdk/package.json'
       - '.github/workflows/storybook.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/storybook.yml'
+  workflow_dispatch:
 
+# Allow the deploy job to publish to GitHub Pages.
 permissions:
   contents: read
   pages: write
   id-token: write
 
+concurrency:
+  group: storybook-pages
+  cancel-in-progress: false
+
 jobs:
-  build-storybook:
+  build:
     name: Build Storybook
     runs-on: ubuntu-latest
-    outputs:
-      built: ${{ steps.detect.outputs.built }}
-      package_dir: ${{ steps.detect.outputs.package_dir }}
+    defaults:
+      run:
+        working-directory: sdk
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Detect Storybook package
-        id: detect
-        shell: bash
-        run: |
-          set -euo pipefail
-          PACKAGE_DIR="$(node - <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-
-          const root = process.cwd();
-          const ignored = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
-
-          function walk(dir) {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-              if (ignored.has(entry.name)) continue;
-              const full = path.join(dir, entry.name);
-              if (entry.isDirectory()) {
-                const nested = walk(full);
-                if (nested) return nested;
-                continue;
-              }
-              if (entry.name !== 'package.json') continue;
-              const pkg = JSON.parse(fs.readFileSync(full, 'utf8'));
-              if (pkg?.scripts?.['build-storybook']) {
-                process.stdout.write(path.relative(root, path.dirname(full)));
-                return path.dirname(full);
-              }
-            }
-            return null;
-          }
-
-          walk(root);
-          NODE
-          )"
-
-          if [ -z "$PACKAGE_DIR" ]; then
-            echo "No package with a build-storybook script exists in this repo."
-            echo "built=false" >> "$GITHUB_OUTPUT"
-            echo "package_dir=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "Found Storybook package at $PACKAGE_DIR"
-          echo "built=true" >> "$GITHUB_OUTPUT"
-          echo "package_dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Node.js
-        if: steps.detect.outputs.built == 'true'
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           cache: npm
-          cache-dependency-path: ${{ steps.detect.outputs.package_dir }}/package-lock.json
-
-      - name: Report missing Storybook
-        if: steps.detect.outputs.built != 'true'
-        shell: bash
-        run: |
-          echo "::notice::Skipping Storybook build because no package with a build-storybook script exists in this repository."
-          {
-            echo "### Storybook skipped"
-            echo
-            echo "No package with a \`build-storybook\` script exists in this repository, so no Pages artifact was generated."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Install dependencies
-        if: steps.detect.outputs.built == 'true'
-        working-directory: ${{ steps.detect.outputs.package_dir }}
-        run: npm ci
-
-      - name: Build Storybook
-        if: steps.detect.outputs.built == 'true'
-        working-directory: ${{ steps.detect.outputs.package_dir }}
-        run: npm run build-storybook
-
-      - name: Inspect Storybook output
-        if: steps.detect.outputs.built == 'true'
-        working-directory: ${{ steps.detect.outputs.package_dir }}
-        run: ls -laR . || true
-
-      - name: Upload static Storybook
-        if: steps.detect.outputs.built == 'true'
-        uses: actions/upload-pages-artifact@v5.0.0
+          cache-dependency-path: sdk/package-lock.json
+      - run: npm ci || npm install
+      - run: npm run build-storybook
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ steps.detect.outputs.package_dir }}/storybook-static
+          path: sdk/react/storybook-static
 
-      - name: Report disabled Pages deploy
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.detect.outputs.built == 'true' && (vars.ENABLE_STORYBOOK_PAGES != 'true' || vars.ENABLE_STORYBOOK_PAGES_DEPLOY != 'true')
-        shell: bash
-        run: |
-          echo "::notice::Storybook Pages deployment is disabled. Set ENABLE_STORYBOOK_PAGES=true and ENABLE_STORYBOOK_PAGES_DEPLOY=true to allow the deploy job to run."
-          {
-            echo "### Storybook deploy skipped"
-            echo
-            echo "A Storybook artifact was built, but GitHub Pages deployment is disabled."
-            echo
-            echo "Set both \`ENABLE_STORYBOOK_PAGES=true\` and \`ENABLE_STORYBOOK_PAGES_DEPLOY=true\` to allow deployment from \`main\`."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  deploy-pages:
+  deploy:
     name: Deploy to GitHub Pages
-    needs: build-storybook
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.built == 'true' && vars.ENABLE_STORYBOOK_PAGES == 'true' && vars.ENABLE_STORYBOOK_PAGES_DEPLOY == 'true'
+    needs: build
+    # Only publish from the default branch; PRs just build to catch breakage.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4
